@@ -11,7 +11,7 @@ check('Stripe dependency',!!pkg.dependencies.stripe);
 check('no SQLite runtime dependency',!JSON.stringify(pkg.dependencies).toLowerCase().includes('sqlite'));
 const server=read('lib/server.ts');
 check('30-minute reader session',server.includes('30*60*1000'));
-check('daily QR uses Addis day',server.includes('addisDay()')&&server.includes('nextAddisMidnight'));
+check('permanent QR reused across days',server.includes("day='permanent'")&&server.includes("data.day!=='permanent'"));
 check('subscription gates QR',server.includes('requireActiveSubscription'));
 check('subscription gates scans',server.includes('billing.active?data:null'));
 const sql=read('supabase/migrations/001_tomoca_reads.sql');

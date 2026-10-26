@@ -35,7 +35,7 @@ export async function GET(req:Request,{params}:{params:Promise<{action:string}>}
         stats:[...totals].map(([branch,sessions])=>({branch,sessions})),
         registrations:{total:registrations.count||0,opted_in:registrations.count||0},
         recentRegistrations:recent.data||[],health:currentEdition.health||[],updated:currentEdition.updated,
-        billing:{amount:20,currency:'USD',status:billing.status,active:billing.active,configured:billing.configured,currentPeriodEnd:billing.currentPeriodEnd,customer:!!billing.customerId,subscription:!!billing.subscriptionId},
+        billing:{amount:25,currency:'USD',status:billing.status,active:billing.active,configured:billing.configured,currentPeriodEnd:billing.currentPeriodEnd,customer:!!billing.customerId,subscription:!!billing.subscriptionId},
         branches,
         operations:{database:'Supabase PostgreSQL',automaticBackups:'Supabase plan dependent',registrationRetentionDays:config.registrationRetentionDays(),overrideRetentionDays:config.overrideRetentionDays(),maintenance:'Daily Vercel cron + on-demand admin maintenance'}
       });
@@ -45,7 +45,7 @@ export async function GET(req:Request,{params}:{params:Promise<{action:string}>}
       const branch=url.searchParams.get('branch')||'';
       const code=await dailyQr(branch);
       const link=url.origin+'/scan?code='+code.id;
-      return json({image:await QRCode.toDataURL(link,{width:380,margin:2,color:{dark:'#171714',light:'#ffffff'}}),expires:code.expires,branch,link,day:code.day,daily:true});
+      return json({image:await QRCode.toDataURL(link,{width:380,margin:2,color:{dark:'#171714',light:'#ffffff'}}),expires:code.expires,branch,link,day:code.day,daily:false,permanent:true});
     }
     return json({error:'Not found'},404);
   }catch(error:any){console.error(error);return json({error:error?.message||'The reading desk is temporarily unavailable. Please try again.'},Number(error?.status)||503);}

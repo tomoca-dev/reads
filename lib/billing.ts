@@ -10,8 +10,8 @@ export async function verifiedMonthlyPrice(){
   const id=requireEnv('STRIPE_PRICE_ID',config.stripePriceId());
   const price=await stripe().prices.retrieve(id);
   const recurring=price.recurring;
-  if(!price.active||price.currency!=='usd'||price.unit_amount!==2000||!recurring||recurring.interval!=='month'||recurring.interval_count!==1){
-    throw new Error('STRIPE_PRICE_ID must point to an active recurring $20 USD monthly price.');
+  if(!price.active||price.currency!=='usd'||price.unit_amount!==2500||!recurring||recurring.interval!=='month'||recurring.interval_count!==1){
+    throw new Error('STRIPE_PRICE_ID must point to an active recurring $25 USD monthly price.');
   }
   return price;
 }

@@ -3,7 +3,7 @@ import seed from './seed.json';
 import {supabaseAdmin} from './supabase-server';
 import {localAdmin} from './admin-auth';
 import {digest,randomToken,sameOrigin} from './security';
-import {addisDay,nextAddisMidnight} from './time';
+import {addisDay} from './time';
 import {billingState,requireActiveSubscription} from './billing';
 import {config} from './config';
 
@@ -37,7 +37,8 @@ export async function createReaderSession(branch:string){
 export async function dailyQr(branch:string){
   await requireActiveSubscription();
   if(!branches.some(b=>b.id===branch))throw Object.assign(new Error('Choose a branch.'),{status:400});
-  const db=supabaseAdmin(),day=addisDay(),now=Date.now(),expires=nextAddisMidnight(now),id=randomToken();
+  // The permanent marker reuses the branch's code across calendar days.
+  const db=supabaseAdmin(),day='permanent',now=Date.now(),expires=253402300799999,id=randomToken();
   const created=await db.rpc('get_or_create_daily_code',{p_branch:branch,p_day:day,p_id:id,p_created:now,p_expires:expires});
   if(created.error)throw new Error('Daily QR creation failed: '+created.error.message);
   const row=Array.isArray(created.data)?created.data[0]:created.data;
@@ -50,7 +51,7 @@ export async function validDailyCode(code:string){
   const db=supabaseAdmin(),now=Date.now();
   const {data,error}=await db.from('codes').select('branch,day,expires').eq('id',code).gt('expires',now).maybeSingle();
   if(error)throw new Error('QR validation failed: '+error.message);
-  if(!data||data.day!==addisDay(now))return null;
+  if(!data||(data.day!=='permanent'&&data.day!==addisDay(now)))return null;
   const billing=await billingState();
   return billing.active?data:null;
 }

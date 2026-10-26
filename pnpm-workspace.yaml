@@ -1,0 +1,4 @@
+# The resolver ships platform binaries; its install script is not required.
+# Record an explicit decision so pnpm 11 can install unattended on Vercel.
+allowBuilds:
+  unrs-resolver: false

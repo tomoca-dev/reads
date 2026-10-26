@@ -76,7 +76,7 @@ Never put the Supabase secret key in a `NEXT_PUBLIC_*` variable. The runtime als
 In Stripe Dashboard:
 
 1. Create a product such as **TOMOCA Reads**.
-2. Add a recurring monthly price of **$20 USD/month**.
+2. Add a recurring monthly price of **$25 USD/month**.
 3. Copy its `price_...` ID to `STRIPE_PRICE_ID`.
 4. Copy the Stripe secret API key to `STRIPE_SECRET_KEY`.
 
@@ -230,7 +230,7 @@ The daily QR is still a bearer token. A photograph of the valid day's QR can be 
 
 ## 8. Stripe billing behavior
 
-The admin can start the $20/month subscription from the dashboard. The server creates a Stripe Checkout Session. Stripe—not TOMOCA Reads—collects the card details.
+The admin can start the $25/month subscription from the dashboard. The server creates a Stripe Checkout Session. Stripe—not TOMOCA Reads—collects the card details.
 
 Signed Stripe webhooks update the single TOMOCA organization record in Supabase. Customer QR scans are allowed only when the subscription is `active` or `trialing`.
 
