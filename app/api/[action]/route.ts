@@ -4,6 +4,7 @@ import {supabaseAdmin} from '../../../lib/supabase-server';
 import {billingState} from '../../../lib/billing';
 import {config} from '../../../lib/config';
 import QRCode from 'qrcode';
+import {pendingEntry,startEntry,readerCookie,syncSheets,sheetsSettings,configureSheets} from '../../../lib/reader-entry';
 export const dynamic='force-dynamic';
 export const maxDuration=30;
 const json=(value:unknown,status=200)=>Response.json(value,{status,headers:{'Cache-Control':'no-store'}});
@@ -11,7 +12,7 @@ const json=(value:unknown,status=200)=>Response.json(value,{status,headers:{'Cac
 export async function GET(req:Request,{params}:{params:Promise<{action:string}>}){
   try{
     const {action}=await params;const url=new URL(req.url);
-    if(action==='session')return json({session:await getSession(req),admin:await isAdmin()});
+    if(action==='session'){const pending=await pendingEntry(req);return json({session:await getSession(req),admin:await isAdmin(),pending:pending?{branch:pending.event.branch}:null});}
     if(action==='edition'){
       if(!await getSession(req)&&!await isAdmin())return json({error:'Scan the QR at TOMOCA to start reading.'},401);
       const ed=await edition();
@@ -20,20 +21,23 @@ export async function GET(req:Request,{params}:{params:Promise<{action:string}>}
     }
     if(!await isAdmin())return json({error:'Management access required.'},403);
 
+    if(action==='sheets'){const settings=await sheetsSettings();return json({configured:!!settings,url:settings?.url||''});}
+
     if(action==='manage'){
       const db=supabaseAdmin();
-      const [metrics,registrations,recent,currentEdition,billing]=await Promise.all([
+      const [metrics,registrations,recent,currentEdition,billing,optedIn]=await Promise.all([
         db.from('daily_branch_metrics').select('branch,sessions'),
         db.from('registrations').select('*',{count:'exact',head:true}),
         db.from('registrations').select('phone,branch,created,notice').order('created',{ascending:false}).limit(50),
         rawEdition(),
-        billingState()
+        billingState(),
+        db.from('registrations').select('*',{count:'exact',head:true}).eq('consent',true)
       ]);
       if(metrics.error||registrations.error||recent.error)throw new Error(metrics.error?.message||registrations.error?.message||recent.error?.message);
       const totals=new Map<string,number>();for(const row of metrics.data||[])totals.set(row.branch,(totals.get(row.branch)||0)+Number(row.sessions||0));
       return json({
         stats:[...totals].map(([branch,sessions])=>({branch,sessions})),
-        registrations:{total:registrations.count||0,opted_in:registrations.count||0},
+        registrations:{total:registrations.count||0,opted_in:optedIn.count||0},
         recentRegistrations:recent.data||[],health:currentEdition.health||[],updated:currentEdition.updated,
         billing:{amount:25,currency:'USD',status:billing.status,active:billing.active,configured:billing.configured,currentPeriodEnd:billing.currentPeriodEnd,customer:!!billing.customerId,subscription:!!billing.subscriptionId},
         branches,
@@ -61,6 +65,15 @@ export async function POST(req:Request,{params}:{params:Promise<{action:string}>
     if(!sameOrigin(req))return json({error:'Invalid request origin.'},403);
     const body:any=await req.json();
 
+    if(action==='start'){
+      const session=await startEntry(req,body);
+      after(async()=>{try{await syncSheets();}catch{console.error('Google Sheets sync pending; scan saved for retry.');}});
+      const headers=new Headers({'Cache-Control':'no-store'});
+      headers.append('Set-Cookie',readerCookie('tomoca_session',session.token,Math.max(1,Math.floor((session.expires-Date.now())/1000))));
+      headers.append('Set-Cookie',readerCookie('tomoca_pending','',0));
+      return Response.json({ok:true,expires:session.expires},{headers});
+    }
+
     if(action==='register'){
       const session=await getSession(req);if(!session)return json({error:'Start a reading session first.'},401);
       let phone=String(body.phone||'').replace(/[\s()-]/g,'');if(/^0[79]\d{8}$/.test(phone))phone='+251'+phone.slice(1);
@@ -72,6 +85,10 @@ export async function POST(req:Request,{params}:{params:Promise<{action:string}>
     }
 
     if(!await isAdmin())return json({error:'Management access required.'},403);
+    if(action==='sheets'){
+      if(body.url&&body.secret)await configureSheets(String(body.url).trim(),String(body.secret).trim());
+      return json(await syncSheets());
+    }
     if(action==='registrations'){
       if(body.action!=='delete'||typeof body.phone!=='string')return json({error:'Invalid registration action.'},400);
       const {error}=await supabaseAdmin().from('registrations').delete().eq('phone',body.phone);
