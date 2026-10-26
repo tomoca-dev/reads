@@ -1,6 +1,8 @@
 import Stripe from 'stripe';
 import {config,requireEnv} from './config';
 import {supabaseAdmin} from './supabase-server';
+// TOMOCA provides complimentary reading independently of its optional Stripe subscription.
+const COMPLIMENTARY_READING_ENABLED=true;
 let stripeClient:Stripe|undefined;
 export function stripe(){if(!stripeClient)stripeClient=new Stripe(requireEnv('STRIPE_SECRET_KEY',config.stripeSecretKey()));return stripeClient;}
 export type BillingState={status:string;active:boolean;customerId:string|null;subscriptionId:string|null;currentPeriodEnd:number|null;configured:boolean};
@@ -20,7 +22,8 @@ export async function billingState():Promise<BillingState>{
   const {data,error}=await supabaseAdmin().from('organizations').select('stripe_customer_id,stripe_subscription_id,subscription_status,current_period_end').eq('id','tomoca').maybeSingle();
   if(error)throw new Error('Billing state lookup failed: '+error.message);
   const status=data?.subscription_status||'inactive';
-  return {status,active:isPaidStatus(status),customerId:data?.stripe_customer_id||null,subscriptionId:data?.stripe_subscription_id||null,currentPeriodEnd:data?.current_period_end||null,configured:billingConfigured()};
+  const paid=isPaidStatus(status);
+  return {status:!paid&&COMPLIMENTARY_READING_ENABLED?'complimentary':status,active:paid||COMPLIMENTARY_READING_ENABLED,customerId:data?.stripe_customer_id||null,subscriptionId:data?.stripe_subscription_id||null,currentPeriodEnd:data?.current_period_end||null,configured:billingConfigured()};
 }
 export async function requireActiveSubscription(){const state=await billingState();if(!state.active)throw Object.assign(new Error('TOMOCA Reads subscription is not active.'),{status:402});return state;}
 export async function ensureOrganization(){
