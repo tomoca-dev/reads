@@ -1,4 +1,4 @@
-import {collect,withCoffeeFallback} from './news.mjs';
+import {collect,withCoffeeFallback,sources} from './news.mjs';
 import seed from './seed.json';
 import {supabaseAdmin} from './supabase-server';
 import {localAdmin} from './admin-auth';
@@ -65,7 +65,7 @@ async function savedEdition(){
 }
 
 export function editionIsStale(ed:any){
-  return !ed||Date.now()-Number(ed.updated||0)>60*60*1000||!ed.health?.some((s:any)=>s.name==='Daily Coffee News');
+  return !ed||Date.now()-Number(ed.updated||0)>60*60*1000||sources.some(source=>!ed.health?.some((s:any)=>s.name===source.name));
 }
 
 export async function refreshEdition(){
