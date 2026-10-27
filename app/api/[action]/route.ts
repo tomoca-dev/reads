@@ -21,6 +21,26 @@ export async function GET(req:Request,{params}:{params:Promise<{action:string}>}
     }
     if(!await isAdmin())return json({error:'Management access required.'},403);
 
+    if(action==='export'){
+      const type=url.searchParams.get('type')||'scans';
+      if(!['scans','registrations','branches'].includes(type))return json({error:'Choose a valid report.'},400);
+      const db=supabaseAdmin();const records:any[]=[];
+      // Page through all retained rows; Supabase limits each response to 1,000.
+      for(let offset=0;;offset+=1000){
+        let q=type==='scans'?db.from('editions').select('id,data').like('id','reader-event:%').order('id'):type==='registrations'?db.from('registrations').select('phone,branch,created,consent,notice').order('phone'):db.from('daily_branch_metrics').select('day,branch,sessions').order('day').order('branch');
+        const {data,error}=await q.range(offset,offset+999);if(error)throw new Error('Report export failed. Please try again.');
+        records.push(...(data||[]));if((data||[]).length<1000)break;
+      }
+      const eat=(n:unknown)=>Number(n)>0?new Date(Number(n)+10800000).toISOString().slice(0,19)+'+03:00':'';
+      const header=type==='scans'?['Event ID','Scan time (EAT)','Branch','Phone number','Reading started (EAT)','Session ends (EAT)','Marketing permission','Record type']:type==='registrations'?['Phone number','Branch','Last registered (EAT)','Marketing permission','Notice']:['Date (EAT)','Branch','Reading sessions'];
+      const rows=records.map(r=>type==='scans'?[r.data.id,eat(r.data.scanned),r.data.branch,r.data.phone||'',eat(r.data.started),eat(r.data.expires),r.data.started?(r.data.consent?'Yes':'No'):'Not submitted',r.data.phone==='+12025550142'?'TEST':'Customer']:type==='registrations'?[r.phone,r.branch,eat(r.created),r.consent?'Yes':'No',r.notice]:[r.day,r.branch,r.sessions]);
+      // Neutralize spreadsheet formulas, preserve phone numbers as text, quote
+      // every field, and use UTF-8 BOM so Excel also reads Amharic correctly.
+      const cell=(v:unknown)=>{let t=String(v??'');if(/^[\s]*[=+@-]/.test(t)||/^[\t\r\n]/.test(t))t="'"+t;return '"'+t.replace(/"/g,'""')+'"';};
+      const csv='\uFEFF'+[header,...rows].map(row=>row.map(cell).join(',')).join('\r\n')+'\r\n';
+      return new Response(csv,{headers:{'Content-Type':'text/csv; charset=utf-8','Content-Disposition':`attachment; filename="TOMOCA_Reads_${type}_${new Date().toISOString().slice(0,10)}.csv"`,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
+    }
+
     if(action==='sheets'){const settings=await sheetsSettings();return json({configured:!!settings,url:settings?.url||''});}
 
     if(action==='manage'){
